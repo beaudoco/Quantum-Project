@@ -95,7 +95,7 @@ void printQureg(Qureg qureg)
     }
 }
 
-void exchangeStateVectors(Qureg qureg, int pairRank)
+void exchangeStateVectors(Qureg qureg, Qureg *qureg2, int pairRank)
 {
 
     // exchange state-vectors through multiple messages to avoid MPI limits
@@ -104,86 +104,80 @@ void exchangeStateVectors(Qureg qureg, int pairRank)
         maxNumMessages = qureg.numAmpsPerRank;
     int numMessages = qureg.numAmpsPerRank / maxNumMessages;
 
+    double complex *stateVector;
+    stateVector = calloc(qureg.numAmpsPerRank * 2, sizeof stateVector);
+
     int TAG = 100;
     MPI_Status status;
-
-    double complex *stateVector;
-    stateVector = calloc(qureg.numAmpsPerRank, sizeof *stateVector);
 
     // send this node's stateVector to pairRank's bufferVector
     // receive pairRank's stateVector into this node's bufferVector
     for (int i = 0; i < numMessages; i++)
-    {
-        //FIGURE OUT WHAT TO SEND AND FOR CALC AND HOW TO HANDLE
-        // MPI_Send(&qureg.stateVector[i * maxNumMessages], maxNumMessages, MPI_C_DOUBLE_COMPLEX, pairRank, TAG, MPI_COMM_WORLD);
-        // MPI_Recv(&stateVector[i * maxNumMessages], maxNumMessages, MPI_C_DOUBLE_COMPLEX, pairRank, TAG, MPI_COMM_WORLD, &status);
+
         MPI_Sendrecv(
             &qureg.stateVector[i * maxNumMessages], maxNumMessages, MPI_C_DOUBLE_COMPLEX, pairRank, TAG,
             &stateVector[i * maxNumMessages], maxNumMessages, MPI_C_DOUBLE_COMPLEX, pairRank, TAG,
             MPI_COMM_WORLD, &status);
-    }
 
-    // ensure all nodes are ready (sp we don't interrupt another node's previous print)
-    MPI_Barrier(MPI_COMM_WORLD);
-
-    for (int r = 0; r < qureg.numRanks; r++)
+    // NOW WE HAVE THE VALUES LETS CALC
+    for (int i = 0; i < qureg.numAmpsPerRank; i++)
     {
 
-        // only one node prints at a time
-        if (qureg.rank == r)
+        double complex amp = qureg.stateVector[i];
+
+        for (int j = 0; j < qureg.numAmpsPerRank; j++)
         {
-            printf("(node %d)\n", r);
 
-            for (int i = 0; i < qureg.numAmpsPerRank; i++)
-            {
-                double complex amp = stateVector[i];
-                int ind = i + r * qureg.numAmpsPerRank;
-                printf("qureg[%d] = %g + (%g)i\n", ind, creal(amp), cimag(amp));
-            }
+            qureg.bufferVector[i] += stateVector[j] * qureg2[j + pairRank * qureg.numAmpsPerRank].stateVector[i];
         }
-
-        // prevent other nodes printing prematurely by racing
-        MPI_Barrier(MPI_COMM_WORLD);
     }
+    free(stateVector);
 }
 
 void matrixMultiplication(Qureg qureg, Qureg *qureg2)
 {
-    bool tmp = true;
 
     for (int r = 0; r < qureg.numRanks; r++)
     {
-        if (qureg.rank == 0)
-        {
-            for (long long int i = 0; i < qureg.numAmpsPerRank; i++)
-            {
-                // double complex amp = qureg.stateVector[i];
-                long long int ind = i + r * qureg.numAmpsPerRank;
-                // printf("qureg[%lld]\n", ind);
-                for (long long int j = 0; j < qureg.numAmpsTotal; j++)
-                {
-                    // double complex amp2 = qureg2[ind].stateVector[j];
-                    long long int ind2 = j;
 
-                    if ((i < ind && j >= r * qureg.numAmpsPerRank) || (i == ind && j < qureg.numAmpsPerRank))
-                    {
-                        // printf("qureg[%lld] = qureg2[%lld][%lld]\n", ind, ind2, ind);
-                        qureg.bufferVector[ind] += qureg.stateVector[ind2] * qureg2[ind2].stateVector[ind];
-                    }
-                    else
-                    {
-                        long long int tmp = 1;
-                        printf("qureg[%lld] = %g + (%g)i\n", ind, creal(qureg.stateVector[tmp]), cimag(qureg.stateVector[tmp]));
-                        // exchangeStateVectors(qureg, r);
-                    }
+        if (qureg.rank == r)
+        {
+
+            for (int i = 0; i < qureg.numAmpsPerRank; i++)
+            {
+
+                double complex amp = qureg.stateVector[i];
+                int ind = i + r * qureg.numAmpsPerRank;
+
+                for (int j = 0; j < qureg.numAmpsPerRank; j++)
+                {
+
+                    qureg.bufferVector[i] += qureg.stateVector[j] * qureg2[j + r * qureg.numAmpsPerRank].stateVector[i];
                 }
             }
         }
+        else
+        {
+
+            // THIS IS FOR OFF NODE CALCULATIONS
+            exchangeStateVectors(qureg, qureg2, r);
+        }
     }
 
-    // OVERWRITE THE STATE VECTOR P WITH ITS BUFFER
-    size_t numBytes = qureg.numAmpsTotal * sizeof *qureg.stateVector;
-    memcpy(qureg.stateVector, qureg.bufferVector, numBytes);
+    double complex *stateVector;
+    stateVector = calloc(qureg.numAmpsPerRank * 2, sizeof stateVector);
+
+    for (int r = 0; r < qureg.numRanks; r++)
+    {
+
+        if (qureg.rank == r)
+        {
+
+            // OVERWRITE THE STATE VECTOR P WITH ITS BUFFER
+            size_t numBytes = qureg.numAmpsTotal * sizeof *qureg.stateVector;
+            memcpy(qureg.stateVector, qureg.bufferVector, numBytes);
+        }
+    }
 }
 
 int main()
@@ -197,32 +191,21 @@ int main()
     int numQubits = 3;
     Qureg qureg = createQureg(numQubits);
     initRandomQureg(qureg);
-    printQureg(qureg);
 
-    // THIS IS THE SECOND STATE VECTOR
     // MAKE THIS HERMITIAN USING SOMETHING LIKE
-    // Qureg dens = createQureg(2 * numQubits);
-    // OR
     Qureg *dens = calloc(1LL << numQubits, sizeof qureg);
     for (long long int i = 0; i < qureg.numAmpsTotal; i++)
     {
-        // sleeping to force-flush stdout (else lines jumbled despite process synch)
-        sleep(1);
+
         dens[i] = createQureg(numQubits);
         initRandomQureg(dens[i]);
-        // printQureg(dens[i]);
-        sleep(1);
     }
 
     // HERE WE ARE GOING TO ATTEMPT TO MATRIX MULTIPLY
-    // sleeping to force-flush stdout (else lines jumbled despite process synch)
-    sleep(1);
     matrixMultiplication(qureg, dens);
-    sleep(1);
-    printf("The updated matrix:\n");
+
     sleep(1);
     printQureg(qureg);
-
     sleep(1);
 
     MPI_Finalize();
