@@ -1,0 +1,1 @@
+nvcc hermitian_cuda.c -o hermitian_cuda
