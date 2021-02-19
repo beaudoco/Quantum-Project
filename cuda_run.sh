@@ -1,1 +1,1 @@
-nvcc hermitian_cuda.c -o hermitian_cuda
+nvcc hermitian_cuda.c compute.cu -o hermitian_cuda
