@@ -7,6 +7,7 @@
 #include <math.h>    // for pow()
 #include <mpi.h>     // for MPI
 #include <stdbool.h> // for bool
+#include <time.h>    // for time testing
 
 typedef struct Qureg
 {
@@ -124,27 +125,27 @@ void exchangeStateVectors(Qureg qureg, int pairRank)
     }
 
     // ensure all nodes are ready (sp we don't interrupt another node's previous print)
-    MPI_Barrier(MPI_COMM_WORLD);
+    // MPI_Barrier(MPI_COMM_WORLD);
 
-    for (int r = 0; r < qureg.numRanks; r++)
-    {
+    // for (int r = 0; r < qureg.numRanks; r++)
+    // {
 
-        // only one node prints at a time
-        if (qureg.rank == r)
-        {
-            printf("(node %d)\n", r);
+    //     // only one node prints at a time
+    //     if (qureg.rank == r)
+    //     {
+    //         printf("(node %d)\n", r);
 
-            for (int i = 0; i < qureg.numAmpsPerRank; i++)
-            {
-                double complex amp = stateVector[i];
-                int ind = i + r * qureg.numAmpsPerRank;
-                printf("qureg[%d] = %g + (%g)i\n", ind, creal(amp), cimag(amp));
-            }
-        }
+    //         for (int i = 0; i < qureg.numAmpsPerRank; i++)
+    //         {
+    //             double complex amp = stateVector[i];
+    //             int ind = i + r * qureg.numAmpsPerRank;
+    //             printf("qureg[%d] = %g + (%g)i\n", ind, creal(amp), cimag(amp));
+    //         }
+    //     }
 
-        // prevent other nodes printing prematurely by racing
-        MPI_Barrier(MPI_COMM_WORLD);
-    }
+    //     // prevent other nodes printing prematurely by racing
+    //     MPI_Barrier(MPI_COMM_WORLD);
+    // }
 }
 
 void matrixMultiplication(Qureg qureg, Qureg *qureg2)

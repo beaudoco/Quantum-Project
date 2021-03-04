@@ -11,19 +11,9 @@
 
 #define THREADS_PER_BLOCK 512
  
-// __global__ void compute_d (double complex *a_d, double complex *b_d, int n)
 __global__ void compute_d (double *a_d, double *b_d, double *c_d, double *d_d, double *e_d, double *f_d, int n)
 {
 
-    // int x = blockIdx.x * blockDim.x + threadIdx.x;
-    // int y = blockIdx.y * blockDim.y + threadIdx.y;
-    // if (x < n && y < n) {
-    //     // e_d[x] = e_d[x] + (a_d[y] * c_d[y + x * n]) + (b_d[y] * d_d[y + x * n] * -1);
-    //     // f_d[x] = f_d[x] + (a_d[y] * d_d[y + x * n]) + (b_d[y] * c_d[y + x * n]);
-        
-    //     e_d[x] = e_d[x] + (a_d[y] * c_d[x + y * n]) + (b_d[y] * d_d[x + y * n] * -1);
-    //     f_d[x] = f_d[x] + (a_d[y] * d_d[x + y * n]) + (b_d[y] * c_d[x + y * n]);
-    // }
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     if (x < n) {
 
@@ -56,10 +46,6 @@ extern "C" void matrixMultiplication(double *quregReal, double *quregImg, double
     
     compute_d <<< ceil((float) arraySize/THREADS_PER_BLOCK), THREADS_PER_BLOCK >>> (a_d, b_d, c_d, d_d, e_d, f_d, arraySize);
 	
-	// cudaError_t err = cudaGetLastError();
-	// if (err != cudaSuccess)
-	// 	printf ("CUDA error: %s\n", cudaGetErrorString(err));
-		
     cudaMemcpy (quregReal, e_d, sizeof(double) * arraySize, cudaMemcpyDeviceToHost);
     cudaMemcpy (quregImg, f_d, sizeof(double) * arraySize, cudaMemcpyDeviceToHost);
 

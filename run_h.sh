@@ -1,2 +1,2 @@
-mpicc -std=c99 hermitian_1.c -o hermitian_1 -lm
-mpirun -np 2 hermitian_1
+mpicc -std=c99 hermitian_MPI.c -o hermitian_MPI -lm
+mpirun -np 2 hermitian_MPI

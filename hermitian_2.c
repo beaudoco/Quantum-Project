@@ -7,6 +7,7 @@
 #include <math.h>    // for pow()
 #include <mpi.h>     // for MPI
 #include <stdbool.h> // for bool
+#include <time.h>    // for time testing
 
 typedef struct Qureg
 {
@@ -188,7 +189,7 @@ int main()
     srand(12345);
 
     // create and print a random qureg
-    int numQubits = 3;
+    int numQubits = 14;
     Qureg qureg = createQureg(numQubits);
     initRandomQureg(qureg);
 
@@ -201,12 +202,24 @@ int main()
         initRandomQureg(dens[i]);
     }
 
+    //SETUP TIMER FOR FILE
+    struct timespec begin, end;
+    clock_gettime(CLOCK_REALTIME, &begin);
+
     // HERE WE ARE GOING TO ATTEMPT TO MATRIX MULTIPLY
     matrixMultiplication(qureg, dens);
 
-    sleep(1);
-    printQureg(qureg);
-    sleep(1);
+    //END CLOCK AND GET TIME
+    clock_gettime(CLOCK_REALTIME, &end);
+    long seconds = end.tv_sec - begin.tv_sec;
+    long nanoseconds = end.tv_nsec - begin.tv_nsec;
+    double elapsed = seconds + nanoseconds * 1e-9;
+
+    printf("time taken for GPU: %f\n", elapsed);
+
+    // sleep(1);
+    // printQureg(qureg);
+    // sleep(1);
 
     MPI_Finalize();
     return 0;

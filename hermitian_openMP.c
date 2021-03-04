@@ -4,11 +4,10 @@
 #include <complex.h> // for double complex
 #include <string.h>  // for memcpy()
 #include <unistd.h>  // for sleep()
+#include <omp.h>     // for openMP
 #include <math.h>    // for pow()
 #include <stdbool.h> // for bool
-#include <time.h>    // for time testing
-
-extern void matrixMultiplication(double *quregReal, double *quregImg, double *qureg2Real, double *qureg2Img, long long arraySize);
+// #include <time.h>    // for time testing
 
 typedef struct Qureg
 {
@@ -75,6 +74,8 @@ void printQureg(Qureg qureg)
 
 int main()
 {
+    //SET THREADS ALLOWED IN PROGRAM
+    omp_set_num_threads(2);
 
     srand(12345);
 
@@ -82,10 +83,6 @@ int main()
     int numQubits = 14;
     Qureg qureg = createQureg(numQubits);
     initRandomQureg(qureg);
-    double *tmpDensMatReal;
-    double *tmpDensMatImg;
-    double *tmpStateVectReal;
-    double *tmpStateVectImg;
 
     // MAKE THIS HERMITIAN USING SOMETHING LIKE
     Qureg *dens = calloc(1LL << numQubits, sizeof qureg);
@@ -96,63 +93,24 @@ int main()
         initRandomQureg(dens[i]);
     }
 
-    tmpDensMatReal = calloc(qureg.numAmpsPerRank * qureg.numAmpsPerRank, sizeof *qureg.stateVector);
-    tmpDensMatImg = calloc(qureg.numAmpsPerRank * qureg.numAmpsPerRank, sizeof *qureg.stateVector);
-    tmpStateVectReal = calloc(qureg.numAmpsPerRank, sizeof *qureg.stateVector);
-    tmpStateVectImg = calloc(qureg.numAmpsPerRank, sizeof *qureg.stateVector);
-
-    for (int i = 0; i < qureg.numAmpsTotal; i++)
-    {
-
-        for (int j = 0; j < qureg.numAmpsTotal; j++)
-        {
-
-            tmpDensMatReal[j + i * qureg.numAmpsTotal] = creal(dens[i].stateVector[j]);
-            tmpDensMatImg[j + i * qureg.numAmpsTotal] = cimag(dens[i].stateVector[j]);
-        }
-        tmpStateVectReal[i] = creal(qureg.stateVector[i]);
-        tmpStateVectImg[i] = cimag(qureg.stateVector[i]);
-    }
-
     //SETUP TIMER FOR FILE
-    struct timespec begin, end;
-    clock_gettime(CLOCK_REALTIME, &begin);
-
-    // HERE WE ARE GOING TO ATTEMPT TO MATRIX MULTIPLY
-    matrixMultiplication(tmpStateVectReal, tmpStateVectImg, tmpDensMatReal, tmpDensMatImg, qureg.numAmpsTotal);
-
-    //END CLOCK AND GET TIME
-    clock_gettime(CLOCK_REALTIME, &end);
-    long seconds = end.tv_sec - begin.tv_sec;
-    long nanoseconds = end.tv_nsec - begin.tv_nsec;
-    double elapsed = seconds + nanoseconds * 1e-9;
-
-    printf("time taken for GPU: %f\n", elapsed);
-
-    // for (int i = 0; i < qureg.numAmpsTotal; i++)
-    // {
-    //     int ind = i;
-    //     printf("qureg[%d] = %g + (%g)i \n", ind, tmpStateVectReal[i], tmpStateVectImg[i]);
-    // }
-
-    // sleep(1);
-    // printQureg(qureg);
-    // sleep(1);
-
-    // //SETUP TIMER FOR FILE
     // struct timespec begin, end;
     // clock_gettime(CLOCK_REALTIME, &begin);
+    // int i, j;
 
-    // for (int i = 0; i < qureg.numAmpsTotal; i++)
-    // {
-    //     qureg.bufferVector[i] = 0;
-    //     for (int j = 0; j < qureg.numAmpsTotal; j++)
-    //     {
-    //         qureg.bufferVector[i] += qureg.stateVector[j] * dens[j].stateVector[i];
-    //     }
-    // }
+// #pragma omp parallel for private(i)
+    for (i = 0; i < qureg.numAmpsTotal; i++)
+    {
 
-    // //END CLOCK AND GET TIME
+#pragma omp parallel for private(j)
+        for (j = 0; j < qureg.numAmpsTotal; j++)
+        {
+#pragma omp critical
+            qureg.bufferVector[j] += qureg.stateVector[i] * dens[i].stateVector[j];
+        }
+    }
+
+    //END CLOCK AND GET TIME
     // clock_gettime(CLOCK_REALTIME, &end);
     // long seconds = end.tv_sec - begin.tv_sec;
     // long nanoseconds = end.tv_nsec - begin.tv_nsec;
@@ -160,8 +118,8 @@ int main()
 
     // printf("time taken for CPU: %f\n", elapsed);
 
-    // size_t numBytes = qureg.numAmpsTotal * sizeof qureg.stateVector * sizeof *qureg.stateVector;
-    // memcpy(qureg.stateVector, qureg.bufferVector, numBytes);
+    size_t numBytes = qureg.numAmpsTotal * sizeof qureg.stateVector * sizeof *qureg.stateVector;
+    memcpy(qureg.stateVector, qureg.bufferVector, numBytes);
 
     // sleep(1);
     // printQureg(qureg);
